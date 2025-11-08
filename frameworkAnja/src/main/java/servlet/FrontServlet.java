@@ -21,11 +21,10 @@ public class FrontServlet extends HttpServlet {
     @Override
     public void init() throws ServletException {
         try {
-            // Scanner le package controller pour détecter toutes les méthodes avec @AnnotationUrl
-            urlMethodMap = ScannerPackage.getUrlMethodMap("controller");
-
-            // Affichage console au démarrage
-            System.out.println("=== Routes détectées au démarrage ===");
+            ClassLoader webAppClassLoader = getServletContext().getClassLoader();
+            String basePackage = "controller";
+            urlMethodMap = ScannerPackage.getUrlMethodMap(basePackage, webAppClassLoader);
+            System.out.println("Routes détectées au démarrage");
             urlMethodMap.forEach((url, method) -> {
                 System.out.println(url + " -> " +
                         method.getDeclaringClass().getSimpleName() + "." + method.getName());
@@ -44,7 +43,7 @@ public class FrontServlet extends HttpServlet {
         String contextPath = request.getContextPath();
         String resourcePath = requestURI.substring(contextPath.length());
 
-        // Vérifier si URL correspond à une méthode annotée
+       
         Method method = urlMethodMap.get(resourcePath);
         if (method != null) {
             try {
@@ -53,7 +52,7 @@ public class FrontServlet extends HttpServlet {
 
                 response.setContentType("text/html;charset=UTF-8");
                 PrintWriter out = response.getWriter();
-                out.println("<h2>💡 Méthode trouvée :</h2>");
+                out.println("<h2> Méthode trouvée :</h2>");
                 out.println("<p>Classe : " + method.getDeclaringClass().getSimpleName() + "</p>");
                 out.println("<p>Méthode : " + method.getName() + "</p>");
                 return;
@@ -63,7 +62,7 @@ public class FrontServlet extends HttpServlet {
             }
         }
 
-        // Vérification ressource statique (ex: fichiers HTML)
+        
         try {
             java.net.URL resource = getServletContext().getResource(resourcePath);
             if (resource != null) {
@@ -77,7 +76,6 @@ public class FrontServlet extends HttpServlet {
             throw new ServletException("Erreur lors de la vérification de la ressource: " + resourcePath, e);
         }
 
-        // Fallback : page par défaut si URL non trouvée
         showFrameworkPage(response, resourcePath);
     }
 
