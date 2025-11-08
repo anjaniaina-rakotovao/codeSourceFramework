@@ -1,4 +1,5 @@
 annotation\AnnotationController.class
 methods\ScannerPackage.class
+methods\ModelVue.class
 servlet\FrontServlet.class
 annotation\AnnotationUrl.class
