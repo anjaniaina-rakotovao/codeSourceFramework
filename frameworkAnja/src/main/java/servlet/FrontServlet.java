@@ -13,7 +13,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import methods.ScannerPackage;
 
-@WebServlet(name = "FrontServlet", urlPatterns = {"/"}, loadOnStartup = 1)
+@WebServlet(name = "FrontServlet", urlPatterns = { "/" }, loadOnStartup = 1)
 public class FrontServlet extends HttpServlet {
 
     private Map<String, Method> urlMethodMap;
@@ -43,26 +43,30 @@ public class FrontServlet extends HttpServlet {
         String contextPath = request.getContextPath();
         String resourcePath = requestURI.substring(contextPath.length());
 
-       
         Method method = urlMethodMap.get(resourcePath);
         if (method != null) {
             try {
                 Object instance = method.getDeclaringClass().getDeclaredConstructor().newInstance();
-                method.invoke(instance);
+                Object result = method.invoke(instance);
 
+                
                 response.setContentType("text/html;charset=UTF-8");
                 PrintWriter out = response.getWriter();
-                out.println("<h2> Méthode trouvée :</h2>");
-                out.println("<p>Classe : " + method.getDeclaringClass().getSimpleName() + "</p>");
-                out.println("<p>Méthode : " + method.getName() + "</p>");
-                return;
 
+                if (result != null && result instanceof String) {
+                    out.println((String) result);
+                    return;
+                } else {
+                    out.println("<h2> Méthode trouvée :</h2>");
+                    out.println("<p>Classe : " + method.getDeclaringClass().getSimpleName() + "</p>");
+                    out.println("<p>Méthode : " + method.getName() + "</p>");
+                    return;
+                }
             } catch (Exception e) {
                 throw new ServletException("Erreur lors de l'exécution de la méthode pour l'URL: " + resourcePath, e);
             }
         }
 
-        
         try {
             java.net.URL resource = getServletContext().getResource(resourcePath);
             if (resource != null) {
