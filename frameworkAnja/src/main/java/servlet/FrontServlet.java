@@ -11,6 +11,7 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import methods.ModelVue;
 import methods.ScannerPackage;
 
 @WebServlet(name = "FrontServlet", urlPatterns = { "/" }, loadOnStartup = 1)
@@ -49,14 +50,19 @@ public class FrontServlet extends HttpServlet {
                 Object instance = method.getDeclaringClass().getDeclaredConstructor().newInstance();
                 Object result = method.invoke(instance);
 
-                
-                response.setContentType("text/html;charset=UTF-8");
-                PrintWriter out = response.getWriter();
-
                 if (result != null && result instanceof String) {
+                    response.setContentType("text/html;charset=UTF-8");
+                    PrintWriter out = response.getWriter();
                     out.println((String) result);
                     return;
+                } else if (result != null && result instanceof ModelVue) {
+                    ModelVue mv = (ModelVue) result;
+                    String url = "/" + mv.getVue() + ".jsp";
+                    RequestDispatcher rd = request.getRequestDispatcher(url);
+                    rd.forward(request, response);
                 } else {
+                    response.setContentType("text/html;charset=UTF-8");
+                    PrintWriter out = response.getWriter();
                     out.println("<h2> Méthode trouvée :</h2>");
                     out.println("<p>Classe : " + method.getDeclaringClass().getSimpleName() + "</p>");
                     out.println("<p>Méthode : " + method.getName() + "</p>");
