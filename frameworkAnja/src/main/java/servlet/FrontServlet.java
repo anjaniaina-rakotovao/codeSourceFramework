@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -17,13 +18,14 @@ import jakarta.servlet.http.HttpServletResponse;
 import methods.ModelVue;
 import methods.ScannerPackage;
 
-@WebServlet (name = "FrontServlet", urlPatterns = { "/" }, loadOnStartup = 1)
+@WebServlet(name = "FrontServlet", urlPatterns = { "/" }, loadOnStartup = 1)
 public class FrontServlet extends HttpServlet {
-    private Map<String, Method> urlMethodMap;
+
+    private Map<String, List<Method>> urlMethodMap;
     private List<String> dynamicPatterns = new ArrayList<>();
 
     @Override
-    public void init () throws ServletException {
+    public void init() throws ServletException {
         try {
             ClassLoader webAppClassLoader = getServletContext().getClassLoader();
             String basePackage = "controller";
@@ -31,88 +33,125 @@ public class FrontServlet extends HttpServlet {
 
             dynamicPatterns = new ArrayList<>(ScannerPackage.dynamicUrlMap.keySet());
             System.out.println("Routes détectées au démarrage");
-            urlMethodMap.forEach((url, method) -> {
-                  System.out.println(url + " -> " +
-                        method.getDeclaringClass().getSimpleName() + "." + method.getName());
-            });
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             throw new ServletException("Erreur lors du scan des controllers", e);
         }
     }
-    
+
     @Override
-protected void service (HttpServletRequest request, HttpServletResponse response)
-        throws ServletException, IOException {
-    String requestURI = request.getRequestURI();
-    String contextPath = request.getContextPath();
-    String resourcePath = requestURI.substring(contextPath.length());
+    protected void service(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
 
-    try {
-        for (Map.Entry<String, Method> e : ScannerPackage.dynamicUrlMap.entrySet()) {
-            String key = e.getKey();
-            String regex;
+        String requestURI = request.getRequestURI();
+        String contextPath = request.getContextPath();
+        String resourcePath = requestURI.substring(contextPath.length());
 
-            if (key.contains("{")) {
-                regex = "^" + key.replaceAll("\\{[^/]+\\}", "([^/]+)") + "$";
-            }
-            else {
-                if (key.startsWith("^") || key.endsWith("$")) {
-                	regex = key;
+        try {
+            for (Map.Entry<String, Method> e : ScannerPackage.dynamicUrlMap.entrySet()) {
+                String key = e.getKey();
+                String regex;
+
+                if (key.contains("{")) {
+                    regex = "^" + key.replaceAll("\\{[^/]+\\}", "([^/]+)") + "$";
+                } else {
+                    if (key.startsWith("^") || key.endsWith("$")) {
+                        regex = key;
+                    } else {
+                        regex = "^" + key + "$";
+                    }
                 }
-                else {
-                	regex = "^" + key + "$";
+
+                if (resourcePath.matches(regex)) {
+                    handleMethod(e.getValue(), request, response);
+                    return;
                 }
             }
-            if (resourcePath.matches(regex)) {
-            	Method dynMethod = e.getValue();
 
-                handleMethod(dynMethod, request, response);
-                return;
+            List<Method> methods = urlMethodMap.get(resourcePath);
+            if (methods != null) {
+                Method methodToCall = null;
+
+                for (Method m : methods) {
+                    Parameter[] params = m.getParameters();
+                    boolean match = true;
+
+                    for (Parameter p : params) {
+                        if (request.getParameter(p.getName()) == null) {
+                            match = false;
+                            break;
+                        }
+                    }
+                    if (match || params.length == 0) {
+                        methodToCall = m;
+                        break;
+                    }
+                }
+
+                if (methodToCall != null) {
+                    handleMethod(methodToCall, request, response);
+                    return;
+                }
             }
+
+        } catch (Exception ex) {
+            throw new ServletException("Erreur lors du matching des routes pour: " + resourcePath, ex);
         }
-    }
-    catch (Exception ex) {
-        throw new ServletException("Erreur lors du matching des routes dynamiques pour: " + resourcePath, ex);
-    }
-    Method method = urlMethodMap.get(resourcePath);
-    if (method == null) {
-        for (String pattern : dynamicPatterns) {
-            String tryRegex;
-            if (pattern.contains("{")) {
-                tryRegex = "^" + pattern.replaceAll("\\{[^/]+\\}", "([^/]+)") + "$";
+
+
+        try {
+            java.net.URL resource = getServletContext().getResource(resourcePath);
+            if (resource != null) {
+                RequestDispatcher defaultServlet = getServletContext().getNamedDispatcher("default");
+                if (defaultServlet != null) {
+                    defaultServlet.forward(request, response);
+                    return;
+                }
             }
-            else if (pattern.startsWith("^") || pattern.endsWith("$")) {
-            	tryRegex = pattern;
-            }
-            else {
-            	tryRegex = "^" + pattern + "$";
-            }
-            if (resourcePath.matches(tryRegex)) {
-            	method = ScannerPackage.dynamicUrlMap.get(pattern);
-                break;
-            }
+        } catch (Exception e) {
+            throw new ServletException("Erreur lors de la vérification de la ressource: " + resourcePath, e);
         }
+
+        showFrameworkPage(response, resourcePath);
     }
-    if (method != null) {
+
+    public void handleMethod(Method method, HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
         try {
             Object instance = method.getDeclaringClass().getDeclaredConstructor().newInstance();
-            Object result = method.invoke(instance);
+            Parameter[] params = method.getParameters();
+            Object[] args = new Object[params.length];
 
-            if (result != null && result instanceof String) {
-            	response.setContentType("text/html;charset=UTF-8");
+            for (int i = 0; i < params.length; i++) {
+                Parameter p = params[i];
+                String value = request.getParameter(p.getName());
+
+                if (value != null) {
+                    if (p.getType().equals(Integer.class) || p.getType().equals(int.class)) {
+                        args[i] = Integer.parseInt(value);
+                    } else if (p.getType().equals(Double.class) || p.getType().equals(double.class)) {
+                        args[i] = Double.parseDouble(value);
+                    } else {
+                        args[i] = value;
+                    }
+                } else {
+                    args[i] = null;
+                }
+            }
+
+            Object result = method.invoke(instance, args);
+
+            if (result instanceof String) {
+                response.setContentType("text/html;charset=UTF-8");
                 PrintWriter out = response.getWriter();
                 out.println((String) result);
                 return;
-            }
-            else if (result != null && result instanceof ModelVue) {
-            	ModelVue mv = (ModelVue) result;
+            } else if (result instanceof ModelVue) {
+                ModelVue mv = (ModelVue) result;
                 String url = "/" + mv.getVue() + ".jsp";
                 RequestDispatcher rd = request.getRequestDispatcher(url);
                 rd.forward(request, response);
                 return;
-            }
-            else if (result != null && !(result instanceof String) && !(result instanceof ModelVue)) {
+            } else if (result != null) {
                 response.setContentType("text/html;charset=UTF-8");
                 PrintWriter out = response.getWriter();
 
@@ -125,75 +164,16 @@ protected void service (HttpServletRequest request, HttpServletResponse response
                     Object value = f.get(result);
                     out.println("<li><strong>" + f.getName() + "</strong> = " + value + "</li>");
                 }
+
                 out.println("</ul>");
                 return;
             }
-            else {
-            	response.setContentType("text/html;charset=UTF-8");
-                PrintWriter out = response.getWriter();
-                out.println("<h2> Méthode trouvée :</h2>");
-                out.println("<p>Classe : " + method.getDeclaringClass().getSimpleName() + "</p>");
-                out.println("<p>Méthode : " + method.getName() + "</p>");
-                return;
-            }
-        }
-        catch (Exception e) {
-            throw new ServletException("Erreur lors de l'exécution de la méthode pour l'URL: " + resourcePath, e);
-        }
-    }
-    try {
-        java.net.URL resource = getServletContext().getResource(resourcePath);
-        if (resource != null) {
-            RequestDispatcher defaultServlet = getServletContext().getNamedDispatcher("default");
-            if (defaultServlet != null) {
-            	defaultServlet.forward(request, response);
-                return;
-            }
-        }
-    }
-    catch (Exception e) {
-        throw new ServletException("Erreur lors de la vérification de la ressource: " + resourcePath, e);
-    }
-    showFrameworkPage(response, resourcePath);
-}
-    public void handleMethod(Method method,HttpServletRequest request,HttpServletResponse response)throws ServletException, IOException {
-        try {
-            Object instance = method.getDeclaringClass().getDeclaredConstructor().newInstance();
-            Object result = method.invoke(instance);
 
-              if (result instanceof String) {
-              	response.setContentType("text/html;charset=UTF-8");
-                    PrintWriter out = response.getWriter();
-                    out.println((String) result);
-                    return;
-              }
-              else if (result instanceof ModelVue) {
-              	ModelVue mv = (ModelVue) result;
-                    String url = "/" + mv.getVue() + ".jsp";
-                    RequestDispatcher rd = request.getRequestDispatcher(url);
-                    rd.forward(request, response);
-              }
-              else if (result != null && !(result instanceof String) && !(result instanceof ModelVue)) {
-                    response.setContentType("text/html;charset=UTF-8");
-                    PrintWriter out = response.getWriter();
-
-                    Class<?> clazz = result.getClass();
-                    out.println("<h2>Objet retourné : " + clazz.getSimpleName() + "</h2>");
-                    out.println("<ul>");
-
-                    for (Field f : clazz.getDeclaredFields()) {
-                        f.setAccessible(true);
-                        Object value = f.get(result);
-                        out.println("<li><strong>" + f.getName() + "</strong> = " + value + "</li>");
-                    }
-                    out.println("</ul>");
-                    return;
-                }
-        }
-        catch (Exception e){
-            throw new ServletException("Erreur execution de méthode",e);
+        } catch (Exception e) {
+            throw new ServletException("Erreur execution de méthode", e);
         }
     }
+
     private void showFrameworkPage(HttpServletResponse response, String requestedPath)
             throws IOException {
         response.setContentType("text/html;charset=UTF-8");

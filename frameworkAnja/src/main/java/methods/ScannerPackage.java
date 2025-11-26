@@ -52,8 +52,8 @@ public class ScannerPackage {
         }
         return classes;
     }
-    public static Map<String, Method> getUrlMethodMap(String packageName, ClassLoader loader) throws Exception {
-        Map<String, Method> urlMap = new HashMap<>();
+    public static Map<String, List<Method>> getUrlMethodMap(String packageName, ClassLoader loader) throws Exception {
+        Map<String, List<Method>> urlMap = new HashMap<>();
         List<Class<?>> controllers = getAnnotatedClasses(packageName, loader);
 
         for (Class<?> clazz : controllers) {
@@ -69,7 +69,8 @@ public class ScannerPackage {
                         dynamicUrlMap.put(finalUrl, method);
                     	
                     }else {
-                    	urlMap.put(finalUrl, method);	
+                    	// urlMap.put(finalUrl, method);	
+                        urlMap.computeIfAbsent(finalUrl, k -> new ArrayList<>()).add(method);
                     }
                 }
             }
