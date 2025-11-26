@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import annotation.RequestParam;
 import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -123,7 +124,9 @@ public class FrontServlet extends HttpServlet {
 
             for (int i = 0; i < params.length; i++) {
                 Parameter p = params[i];
-                String value = request.getParameter(p.getName());
+                RequestParam rp = p.getAnnotation(RequestParam.class);
+                String paramName = (rp != null) ? rp.value() : p.getName();
+                String value = request.getParameter(paramName);
 
                 if (value != null) {
                     if (p.getType().equals(Integer.class) || p.getType().equals(int.class)) {

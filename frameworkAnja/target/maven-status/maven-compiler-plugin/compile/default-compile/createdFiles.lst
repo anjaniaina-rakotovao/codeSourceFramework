@@ -3,3 +3,4 @@ methods\ScannerPackage.class
 methods\ModelVue.class
 servlet\FrontServlet.class
 annotation\AnnotationUrl.class
+annotation\RequestParam.class
