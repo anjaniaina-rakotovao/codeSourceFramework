@@ -16,6 +16,7 @@ import annotation.AnnotationController;
 import annotation.AnnotationUrl;
 
 public class ScannerPackage {
+    public static Map<String, Method> dynamicUrlMap = new HashMap<>();
 
     public static List<Class<?>> getClasses(String packageName, ClassLoader loader) throws Exception {
         List<Class<?>> classes = new ArrayList<>();
@@ -29,12 +30,12 @@ public class ScannerPackage {
                 File folder = new File(resource.toURI());
                 for (File file : folder.listFiles()) {
                     if (file.getName().endsWith(".class")) {
-                        String className = packageName + "." + file.getName().replace(".class", "");
+                    	String className = packageName + "." + file.getName().replace(".class", "");
                         classes.add(Class.forName(className, true, loader));
                     }
                 }
-
-            } else if (resource.getProtocol().equals("jar")) {
+            }
+            else if (resource.getProtocol().equals("jar")) {
                 JarURLConnection conn = (JarURLConnection) resource.openConnection();
                 JarFile jarFile = conn.getJarFile();
                 Enumeration<JarEntry> entries = jarFile.entries();
@@ -43,7 +44,7 @@ public class ScannerPackage {
                     JarEntry entry = entries.nextElement();
                     String name = entry.getName();
                     if (name.startsWith(path) && name.endsWith(".class") && !entry.isDirectory()) {
-                        String className = name.replace('/', '.').replace(".class", "");
+                    	String className = name.replace('/', '.').replace(".class", "");
                         classes.add(Class.forName(className, true, loader));
                     }
                 }
@@ -51,7 +52,6 @@ public class ScannerPackage {
         }
         return classes;
     }
-
     public static Map<String, Method> getUrlMethodMap(String packageName, ClassLoader loader) throws Exception {
         Map<String, Method> urlMap = new HashMap<>();
         List<Class<?>> controllers = getAnnotatedClasses(packageName, loader);
@@ -63,21 +63,26 @@ public class ScannerPackage {
             for (Method method : clazz.getDeclaredMethods()) {
                 if (method.isAnnotationPresent(AnnotationUrl.class)) {
                     AnnotationUrl url = method.getAnnotation(AnnotationUrl.class);
-                    urlMap.put(baseUrl + url.url(), method);
+                    String finalUrl = baseUrl + url.url();
+
+                    if (finalUrl.contains("{")) {
+                        dynamicUrlMap.put(finalUrl, method);
+                    	
+                    }else {
+                    	urlMap.put(finalUrl, method);	
+                    }
                 }
             }
         }
         return urlMap;
     }
-
     public static List<Class<?>> getAnnotatedClasses(String packageName, ClassLoader loader) throws Exception {
         List<Class<?>> annotated = new ArrayList<>();
         for (Class<?> clazz : getClasses(packageName, loader)) {
             if (clazz.isAnnotationPresent(AnnotationController.class)) {
-                annotated.add(clazz);
+            	annotated.add(clazz);
             }
         }
         return annotated;
     }
-
 }
