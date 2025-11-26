@@ -122,11 +122,35 @@ public class FrontServlet extends HttpServlet {
             Parameter[] params = method.getParameters();
             Object[] args = new Object[params.length];
 
+            String requestURI = request.getRequestURI();
+            String contextPath = request.getContextPath();
+            String resourcePath = requestURI.substring(contextPath.length());
+
             for (int i = 0; i < params.length; i++) {
                 Parameter p = params[i];
                 RequestParam rp = p.getAnnotation(RequestParam.class);
                 String paramName = (rp != null) ? rp.value() : p.getName();
                 String value = request.getParameter(paramName);
+
+                    if (value == null) {
+                        for (Map.Entry<String, Method> entry : ScannerPackage.dynamicUrlMap.entrySet()) {
+                        String key = entry.getKey();
+                        if (!key.contains("{")) continue; 
+
+                        String regex = "^" + key.replaceAll("\\{[^/]+\\}", "([^/]+)") + "$";
+                        if (resourcePath.matches(regex)) {
+                        
+                            String[] patternParts = key.split("/");
+                            String[] urlParts = resourcePath.split("/");
+                            for (int j = 0; j < patternParts.length; j++) {
+                                if (patternParts[j].equals("{" + paramName + "}")) {
+                                    value = urlParts[j];
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
 
                 if (value != null) {
                     if (p.getType().equals(Integer.class) || p.getType().equals(int.class)) {
