@@ -14,6 +14,8 @@ import java.util.jar.JarFile;
 
 import annotation.AnnotationController;
 import annotation.AnnotationUrl;
+import annotation.GetMapping;
+import annotation.PostMapping;
 
 public class ScannerPackage {
     public static Map<String, Method> dynamicUrlMap = new HashMap<>();
@@ -52,8 +54,10 @@ public class ScannerPackage {
         }
         return classes;
     }
-    public static Map<String, List<Method>> getUrlMethodMap(String packageName, ClassLoader loader) throws Exception {
+    public static Map<String, Map<String ,List<Method>>> getUrlMethodMap(String packageName, ClassLoader loader) throws Exception {
         Map<String, List<Method>> urlMap = new HashMap<>();
+        Map<String, Map<String ,List<Method>>> urlMap2 = new HashMap<>();
+
         List<Class<?>> controllers = getAnnotatedClasses(packageName, loader);
 
         for (Class<?> clazz : controllers) {
@@ -62,20 +66,35 @@ public class ScannerPackage {
 
             for (Method method : clazz.getDeclaredMethods()) {
                 if (method.isAnnotationPresent(AnnotationUrl.class)) {
+
                     AnnotationUrl url = method.getAnnotation(AnnotationUrl.class);
                     String finalUrl = baseUrl + url.url();
-
-                    if (finalUrl.contains("{")) {
+                    String httpMethod = "";
+                    if(method.isAnnotationPresent(GetMapping.class)){
+                        httpMethod = "get"; 
+                        if (finalUrl.contains("{")) {
                         dynamicUrlMap.put(finalUrl, method);
-                    	
-                    }else {
-                    	// urlMap.put(finalUrl, method);	
-                        urlMap.computeIfAbsent(finalUrl, k -> new ArrayList<>()).add(method);
+                        }else {	
+                            Map<String, List<Method>> innerMap = urlMap2.computeIfAbsent(finalUrl, k -> new HashMap<>());
+                            innerMap.computeIfAbsent(httpMethod,k -> new ArrayList<>()).add(method);
+
+                            urlMap.computeIfAbsent(finalUrl, k -> new ArrayList<>()).add(method);
+                        } 
+                    }else if(method.isAnnotationPresent(PostMapping.class)){
+                        httpMethod = "post";
+                        if (finalUrl.contains("{")) {
+                            dynamicUrlMap.put(finalUrl, method);
+                        }else {	
+                            Map<String, List<Method>> innerMap = urlMap2.computeIfAbsent(finalUrl, k -> new HashMap<>());
+                            innerMap.computeIfAbsent(httpMethod,k -> new ArrayList<>()).add(method);
+
+                            urlMap.computeIfAbsent(finalUrl, k -> new ArrayList<>()).add(method);
+                        }
                     }
                 }
             }
         }
-        return urlMap;
+        return urlMap2;
     }
     public static List<Class<?>> getAnnotatedClasses(String packageName, ClassLoader loader) throws Exception {
         List<Class<?>> annotated = new ArrayList<>();

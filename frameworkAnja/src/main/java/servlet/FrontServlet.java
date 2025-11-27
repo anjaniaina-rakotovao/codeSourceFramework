@@ -22,7 +22,7 @@ import methods.ScannerPackage;
 @WebServlet(name = "FrontServlet", urlPatterns = { "/" }, loadOnStartup = 1)
 public class FrontServlet extends HttpServlet {
 
-    private Map<String, List<Method>> urlMethodMap;
+    private Map<String, Map<String ,List<Method>>> urlMethodMap;
     private List<String> dynamicPatterns = new ArrayList<>();
 
     @Override
@@ -68,32 +68,39 @@ public class FrontServlet extends HttpServlet {
                 }
             }
 
-            List<Method> methods = urlMethodMap.get(resourcePath);
-            if (methods != null) {
+            String httpMethod = request.getMethod().toLowerCase();
+
+
+            Map<String, List<Method>> httpMap = urlMethodMap.get(resourcePath);
+
+            if (httpMap != null) {
+                List<Method> methods = httpMap.get(httpMethod);
+
+                if (methods != null) {
                 Method methodToCall = null;
 
-                for (Method m : methods) {
-                    Parameter[] params = m.getParameters();
-                    boolean match = true;
+                    for (Method m : methods) {
+                        Parameter[] params = m.getParameters();
+                        boolean match = true;
 
-                    for (Parameter p : params) {
-                        if (request.getParameter(p.getName()) == null) {
+                        for (Parameter p : params) {
+                            if (request.getParameter(p.getName()) == null) {
                             match = false;
+                            break;
+                            }
+                        }
+                        if (match || params.length == 0) {
+                            methodToCall = m;
                             break;
                         }
                     }
-                    if (match || params.length == 0) {
-                        methodToCall = m;
-                        break;
+
+                    if (methodToCall != null) {
+                        handleMethod(methodToCall, request, response);
+                        return;
                     }
                 }
-
-                if (methodToCall != null) {
-                    handleMethod(methodToCall, request, response);
-                    return;
-                }
             }
-
         } catch (Exception ex) {
             throw new ServletException("Erreur lors du matching des routes pour: " + resourcePath, ex);
         }

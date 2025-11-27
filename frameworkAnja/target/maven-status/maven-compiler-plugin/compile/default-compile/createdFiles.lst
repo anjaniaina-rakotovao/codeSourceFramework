@@ -1,6 +1,8 @@
 annotation\AnnotationController.class
-methods\ScannerPackage.class
+annotation\GetMapping.class
 methods\ModelVue.class
 servlet\FrontServlet.class
-annotation\AnnotationUrl.class
 annotation\RequestParam.class
+methods\ScannerPackage.class
+annotation\AnnotationUrl.class
+annotation\PostMapping.class
