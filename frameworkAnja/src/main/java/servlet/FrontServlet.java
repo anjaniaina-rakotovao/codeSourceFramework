@@ -84,7 +84,10 @@ public class FrontServlet extends HttpServlet {
                         boolean match = true;
 
                         for (Parameter p : params) {
-                            if (request.getParameter(p.getName()) == null) {
+                            RequestParam rp = p.getAnnotation(RequestParam.class);
+                            String paramName = (rp != null) ? rp.value() : p.getName();
+                            if (request.getParameter(paramName) == null){
+
                             match = false;
                             break;
                             }
@@ -123,90 +126,72 @@ public class FrontServlet extends HttpServlet {
     }
 
     public void handleMethod(Method method, HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-        try {
-            Object instance = method.getDeclaringClass().getDeclaredConstructor().newInstance();
-            Parameter[] params = method.getParameters();
-            Object[] args = new Object[params.length];
+        throws ServletException, IOException {
 
-            String requestURI = request.getRequestURI();
-            String contextPath = request.getContextPath();
-            String resourcePath = requestURI.substring(contextPath.length());
+    try {
+        Object instance = method.getDeclaringClass().getDeclaredConstructor().newInstance();
+        Parameter[] params = method.getParameters();
+        Object[] args = new Object[params.length];
 
-            for (int i = 0; i < params.length; i++) {
-                Parameter p = params[i];
-                RequestParam rp = p.getAnnotation(RequestParam.class);
-                String paramName = (rp != null) ? rp.value() : p.getName();
+        for (int i = 0; i < params.length; i++) {
+            Parameter param = params[i];
+            RequestParam rp = param.getAnnotation(RequestParam.class);
+            String paramName = (rp != null) ? rp.value() : param.getName();
+
+            if (Map.class.isAssignableFrom(param.getType())) {
+                Map<String, Object> map = new java.util.HashMap<>();
                 String value = request.getParameter(paramName);
+                map.put(paramName, value);
 
-                    if (value == null) {
-                        for (Map.Entry<String, Method> entry : ScannerPackage.dynamicUrlMap.entrySet()) {
-                        String key = entry.getKey();
-                        if (!key.contains("{")) continue; 
-
-                        String regex = "^" + key.replaceAll("\\{[^/]+\\}", "([^/]+)") + "$";
-                        if (resourcePath.matches(regex)) {
-                        
-                            String[] patternParts = key.split("/");
-                            String[] urlParts = resourcePath.split("/");
-                            for (int j = 0; j < patternParts.length; j++) {
-                                if (patternParts[j].equals("{" + paramName + "}")) {
-                                    value = urlParts[j];
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (value != null) {
-                    if (p.getType().equals(Integer.class) || p.getType().equals(int.class)) {
-                        args[i] = Integer.parseInt(value);
-                    } else if (p.getType().equals(Double.class) || p.getType().equals(double.class)) {
-                        args[i] = Double.parseDouble(value);
-                    } else {
-                        args[i] = value;
-                    }
-                } else {
-                    args[i] = null;
-                }
+                args[i] = map;
+                continue;
             }
 
-            Object result = method.invoke(instance, args);
-
-            if (result instanceof String) {
-                response.setContentType("text/html;charset=UTF-8");
-                PrintWriter out = response.getWriter();
-                out.println((String) result);
-                return;
-            } else if (result instanceof ModelVue) {
-                ModelVue mv = (ModelVue) result;
-                String url = "/" + mv.getVue() + ".jsp";
-                RequestDispatcher rd = request.getRequestDispatcher(url);
-                rd.forward(request, response);
-                return;
-            } else if (result != null) {
-                response.setContentType("text/html;charset=UTF-8");
-                PrintWriter out = response.getWriter();
-
-                Class<?> clazz = result.getClass();
-                out.println("<h2>Objet retourné : " + clazz.getSimpleName() + "</h2>");
-                out.println("<ul>");
-
-                for (Field f : clazz.getDeclaredFields()) {
-                    f.setAccessible(true);
-                    Object value = f.get(result);
-                    out.println("<li><strong>" + f.getName() + "</strong> = " + value + "</li>");
-                }
-
-                out.println("</ul>");
-                return;
-            }
-
-        } catch (Exception e) {
-            throw new ServletException("Erreur execution de méthode", e);
+            String value = request.getParameter(paramName);
+            Object convertedValue = convertStringToType(value);
+            args[i] = convertedValue;
         }
+        Object result = method.invoke(instance, args);
+        if (result instanceof String) {
+            response.setContentType("text/html;charset=UTF-8");
+            response.getWriter().println(result);
+            return;
+        }
+
+        if (result instanceof ModelVue) {
+            ModelVue mv = (ModelVue) result;
+            RequestDispatcher rd = request.getRequestDispatcher("/" + mv.getVue() + ".jsp");
+            rd.forward(request, response);
+            return;
+        }
+
+        if (result != null) {
+            response.setContentType("text/html;charset=UTF-8");
+            PrintWriter out = response.getWriter();
+            Class<?> clazz = result.getClass();
+            out.println("<h2>Objet retourné : " + clazz.getSimpleName() + "</h2>");
+            out.println("<ul>");
+            for (Field f : clazz.getDeclaredFields()) {
+                f.setAccessible(true);
+                out.println("<li><strong>" + f.getName() + "</strong> = " + f.get(result) + "</li>");
+            }
+            out.println("</ul>");
+        }
+
+    } catch (Exception e) {
+        throw new ServletException("Erreur execution de méthode", e);
     }
+}
+
+private Object convertStringToType(String value) {
+    if (value == null) return null;
+    try { return Integer.parseInt(value); } catch (NumberFormatException ignored) {}
+    try { return Double.parseDouble(value); } catch (NumberFormatException ignored) {}
+    if ("true".equalsIgnoreCase(value)) return true;
+    if ("false".equalsIgnoreCase(value)) return false;
+    return value;
+}
+
 
     private void showFrameworkPage(HttpServletResponse response, String requestedPath)
             throws IOException {
@@ -246,4 +231,7 @@ public class FrontServlet extends HttpServlet {
         out.println("</body>");
         out.println("</html>");
     }
+
+
+
 }
